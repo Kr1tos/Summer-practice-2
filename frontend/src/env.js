@@ -1,1 +1,1 @@
-export const WEBSOCKET_URL = "ws://212.109.220.45:8080"
+export const WEBSOCKET_URL = "wss://sick-kevina-videochat-613b6a78.koyeb.app"
