@@ -1,14 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createSocket } from './socket.js';
 import './style.css';
-import './phone.css';
 
 const App = () => {
   const [messages, setMessages] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [connected, setConnected] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const videoPeerRef = useRef(null);
   const videoSelfRef = useRef(null);
@@ -20,17 +19,6 @@ const App = () => {
 
   useEffect(() => {
     const init = async () => {
-      const ws = await createSocket();
-      wsRef.current = ws;
-
-      ws.register('begin', handleBegin);
-      ws.register('connected', handleConnected);
-      ws.register('message', handleMessage);
-      ws.register('iceCandidate', handleIceCandidate);
-      ws.register('description', handleDescription);
-      ws.register('typing', handleTyping);
-      ws.register('disconnect', handleDisconnect);
-
       try {
         const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         localStreamRef.current = localStream;
@@ -38,16 +26,29 @@ const App = () => {
       } catch (e) {
         alert('This website needs video and audio permission to work correctly');
       }
-
-      await initializeConnection(ws);
-      configureChat(ws);
     };
 
     init();
   }, []);
 
+  const startSearching = async () => {
+    setLoading(true);
+    const ws = await createSocket();
+    wsRef.current = ws;
+
+    ws.register('begin', handleBegin);
+    ws.register('connected', handleConnected);
+    ws.register('message', handleMessage);
+    ws.register('iceCandidate', handleIceCandidate);
+    ws.register('description', handleDescription);
+    ws.register('typing', handleTyping);
+    ws.register('disconnect', handleDisconnect);
+
+    await initializeConnection(ws);
+    configureChat(ws);
+  };
+
   const initializeConnection = async (ws) => {
-    setMessages([{ text: 'Looking for people online...', type: 'status' }]);
     setInputValue('');
     setLoading(true);
 
@@ -95,12 +96,9 @@ const App = () => {
     await pcRef.current.setLocalDescription(offer);
   };
 
-  const handleConnected = (data) => {
+  const handleConnected = () => {
     setConnected(true);
     setLoading(false);
-
-    const newMessages = [{ text: 'You are now talking to a random stranger', type: 'status' }];
-    setMessages(newMessages);
   };
 
   const handleMessage = (msg) => {
@@ -127,7 +125,8 @@ const App = () => {
   const handleDisconnect = async () => {
     pcRef.current.close();
     setConnected(false);
-    await initializeConnection(wsRef.current);
+    setLoading(false);
+    startSearching();
   };
 
   const configureChat = () => {
@@ -164,9 +163,13 @@ const App = () => {
   };
 
   const handleSkip = async (ws) => {
-    ws.emit('disconnect');
-    pcRef.current.close();
-    await initializeConnection(ws);
+    if (ws) {
+      ws.emit('disconnect');
+      pcRef.current.close();
+      setConnected(false);
+      setLoading(false);
+      startSearching();
+    }
   };
 
   const handleSendMessage = (ws) => {
@@ -184,44 +187,44 @@ const App = () => {
 
   return (
     <div id="main">
-      <div id="top-bar">
-        <div id="logo">
-          <img width="20px" src="/assets/logo.svg" alt="" />
+      <div id="videos">
+        <div className="video-container">
+          <video className="video-player" ref={videoSelfRef} autoPlay playsInline muted></video>
+          {loading && <div className="video-loader"></div>}
+        </div>
+        <div className="video-container">
+          <video className="video-player" ref={videoPeerRef} autoPlay playsInline></video>
+          {loading && <div className="video-loader"></div>}
         </div>
       </div>
-      <div id="videos">
-        <div id="peer">
-          <video className="video-player mirror" ref={videoPeerRef} autoPlay playsInline></video>
-          {loading && <div id="peer-video-loader"></div>}
-        </div>
-        <div id="self">
-          <video className="video-player mirror" ref={videoSelfRef} autoPlay playsInline muted></video>
-        </div>
+      <div id="status-bar">
+        <button className="button large-button" onClick={connected ? () => handleSkip(wsRef.current) : startSearching}>
+          {connected ? 'Пропуск собеседника' : 'Поиск собеседника'}
+        </button>
       </div>
       <div id="message-area">
         <div id="messages" ref={messagesRef}>
           {messages.map((msg, index) => (
             <div key={index} className={`message ${msg.type}`}>
-              <span className={msg.type === 'you' ? 'you' : 'strange'}>
-                {msg.type === 'you' ? 'You:' : 'Stranger:'}
-              </span> {msg.text}
+              {msg.text}
             </div>
           ))}
         </div>
-        {isTyping && <div id="typing" className="message">Stranger is typing...</div>}
-      </div>
-      <div id="input-area">
-        <button className="button" onClick={() => handleSkip(wsRef.current)} id="skip-btn">Skip<span>Esc</span></button>
-        <input
-          type="text"
-          id="message-input"
-          placeholder="Type a message..."
-          autoComplete="off"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          readOnly={!connected}
-        />
-        <button className="button" onClick={() => handleSendMessage(wsRef.current)} id="send-btn">Send<span>Enter</span></button>
+        {isTyping && <div className="message typing">Stranger is typing...</div>}
+        <div id="input-area">
+          <input
+            type="text"
+            id="message-input"
+            placeholder="Сообщение"
+            autoComplete="off"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleMessageInputKeyDown}
+            onKeyUp={handleMessageInputKeyUp}
+            readOnly={!connected}
+          />
+          <button className="button" onClick={() => handleSendMessage(wsRef.current)} id="send-btn">Отправить</button>
+        </div>
       </div>
     </div>
   );
