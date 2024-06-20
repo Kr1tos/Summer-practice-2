@@ -2,7 +2,7 @@ const express = require('express');
 const { createServer } = require('http');
 const WebSocket = require('ws');
 
-const SERVER_PORT = process.env.SERVER_PORT || 8000;
+const SERVER_PORT = process.env.PORT || 8000;
 
 if (!SERVER_PORT) {
   throw new Error('Forgot to initialize some variables');
